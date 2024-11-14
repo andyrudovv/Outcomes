@@ -6,12 +6,11 @@ from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 
-from datetime import datetime, timedelta  # Add timedelta here
+from datetime import datetime, timedelta
 from config_reader import config
 import sqlite3
 import os
 
-# ... rest of your code ...
 
 logging.basicConfig(level=logging.INFO)
 
@@ -42,14 +41,19 @@ def connect_to_db():
     cursor = connection.cursor()
     return connection, cursor
 
-@dp.message(Command("start"))
+
+    
+
+@dp.message(lambda message: str(message.text).lower() in \
+            ["/start", "start", "старт"])
 async def cmd_start(message: types.Message, connection, cursor):
 
-    res = cursor.execute("SELECT * FROM expenses")
+    # Greet the user
+    await message.answer("Привет! Это бот для учета расходов.")
 
-    await message.answer(str(res.fetchall()))
 
-@dp.message(Command("help"))
+@dp.message(lambda message: str(message.text).lower() in \
+            ["/help", "help", "помощь"])
 async def cmd_help(message: types.Message):
     help_text = """
 Это бот для учета расходов. Вы можете использовать следующие команды:
@@ -59,10 +63,14 @@ async def cmd_help(message: types.Message):
 /add_expense - добавить новый расход
 /clear_whole_expenses - удалить все расходы
 /last_month_expenses - показать расходы за последний месяц
+/delete_expense - удалить расход по порядковому номеру
     """
     await message.answer(help_text)
 
-@dp.message(Command("add_expense"))
+
+
+@dp.message(lambda message: str(message.text).lower() in \
+            ["/add_expense", "/add", "добавить расход", "добавить"])
 async def cmd_add_expense(message: types.Message, connection, cursor):
     # Define expense categories
     expense_categories = [
@@ -95,7 +103,6 @@ async def handle_expense_category(message: types.Message, state: FSMContext):
 
     # Set the state to waiting for amount
     await state.set_state(ExpenseStates.waiting_for_amount)
-    
 
 
 @dp.message(ExpenseStates.waiting_for_amount)
@@ -123,8 +130,24 @@ async def handle_expense_amount(message: types.Message, state: FSMContext, conne
         await message.answer("Пожалуйста, введите корректную сумму (число).")
     
 
+@dp.message(lambda message: str(message.text).lower() in \
+            ["/delete_last", "/delete", "delete", "Удалить", "Удалить последний месяцовый расход"])
+async def cmd_delete_last(message: types.Message, connection, cursor):
+    last_month = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
+    res = cursor.execute("SELECT * FROM expenses WHERE date >=?", (last_month,))
+    list_of_expenses = res.fetchall()
+    last_id: int = list_of_expenses[-1][0]
+    # delete last month expense from db
+    cursor.execute("DELETE FROM expenses WHERE id=?", (last_id,))
+    connection.commit()
+    await message.answer("Последний месяцовый расход удален.\nТеперь список расходов выглядит так.")
 
-@dp.message(Command("clear_whole_expenses"))
+    res = cursor.execute("SELECT * FROM expenses WHERE date >=?", (last_month,))
+    await message.answer(str(res.fetchall()))
+
+
+@dp.message(lambda message: str(message.text).lower() in \
+            ["/clear_whole_expenses", "/delete_all", "удалить всё", "удалить все", "удалить"])
 async def cmd_clear_expenses(message: types.Message, connection, cursor):
     cursor.execute("DELETE FROM expenses")
     connection.commit()
@@ -132,11 +155,13 @@ async def cmd_clear_expenses(message: types.Message, connection, cursor):
 
 
 # show expenses for last month
-@dp.message(Command("last_month_expenses"))
+@dp.message(lambda message: str(message.text).lower() in \
+            ["/clear_whole_expenses", "/delete_all", "удалить всё", "удалить все", "удалить"])
 async def cmd_last_month_expenses(message: types.Message, connection, cursor):
     last_month = (datetime.now() - timedelta(days=30)).strftime("%Y-%m-%d")
     res = cursor.execute("SELECT * FROM expenses WHERE date >=?", (last_month,))
     await message.answer(str(res.fetchall()))
+
 
 async def main():
     await dp.start_polling(bot)
